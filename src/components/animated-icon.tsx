@@ -1,148 +1,182 @@
-import { Image } from 'expo-image';
+import { ImageBackground } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
-import { useState } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
-import Animated, { Easing, Keyframe } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
-
-const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
-const DURATION = 600;
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 export function AnimatedSplashOverlay() {
-  const [animate, setAnimate] = useState(false);
   const [visible, setVisible] = useState(true);
+  const started = useRef(false);
+  const [opacity] = useState(() => new Animated.Value(0));
+  const [scale] = useState(() => new Animated.Value(0.96));
+  const [progress] = useState(() => new Animated.Value(0));
+
+  const startAnimation = useCallback(() => {
+    if (started.current) return;
+    started.current = true;
+
+    SplashScreen.hideAsync().catch(() => undefined);
+
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 650,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.delay(1450),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 550,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 850,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(progress, {
+            toValue: 1,
+            duration: 850,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(progress, {
+            toValue: 0,
+            duration: 850,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+        { iterations: 2 },
+      ),
+    ]).start(({ finished }) => {
+      if (finished) setVisible(false);
+    });
+  }, [opacity, progress, scale]);
+
+  useEffect(() => {
+    return () => {
+      opacity.stopAnimation();
+      scale.stopAnimation();
+      progress.stopAnimation();
+    };
+  }, [opacity, progress, scale]);
 
   if (!visible) return null;
 
-  const splashKeyframe = new Keyframe({
-    0: {
-      transform: [{ scale: 1 }],
-      opacity: 1,
-    },
-    20: {
-      opacity: 1,
-    },
-    70: {
-      opacity: 0,
-      easing: Easing.elastic(0.7),
-    },
-    100: {
-      opacity: 0,
-      transform: [{ scale: 1 }],
-      easing: Easing.elastic(0.7),
-    },
+  const progressTranslate = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-42, 42],
   });
 
-  const image = <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />;
-
-  return animate ? (
-    <Animated.View
-      entering={splashKeyframe.duration(DURATION).withCallback((finished) => {
-        'worklet';
-        if (finished) {
-          scheduleOnRN(setVisible, false);
-        }
-      })}
-      style={styles.splashOverlay}>
-      {image}
-    </Animated.View>
-  ) : (
-    <View
-      onLayout={() => {
-        SplashScreen.hideAsync().finally(() => {
-          setAnimate(true);
-        });
-      }}
-      style={styles.splashOverlay}>
-      {image}
-    </View>
-  );
-}
-
-const keyframe = new Keyframe({
-  0: {
-    transform: [{ scale: INITIAL_SCALE_FACTOR }],
-  },
-  100: {
-    transform: [{ scale: 1 }],
-    easing: Easing.elastic(0.7),
-  },
-});
-
-const logoKeyframe = new Keyframe({
-  0: {
-    transform: [{ scale: 1.3 }],
-    opacity: 0,
-  },
-  40: {
-    transform: [{ scale: 1.3 }],
-    opacity: 0,
-    easing: Easing.elastic(0.7),
-  },
-  100: {
-    opacity: 1,
-    transform: [{ scale: 1 }],
-    easing: Easing.elastic(0.7),
-  },
-});
-
-const glowKeyframe = new Keyframe({
-  0: {
-    transform: [{ rotateZ: '0deg' }],
-  },
-  100: {
-    transform: [{ rotateZ: '7200deg' }],
-  },
-});
-
-export function AnimatedIcon() {
   return (
-    <View style={styles.iconContainer}>
-      <Animated.View entering={glowKeyframe.duration(60 * 1000 * 4)} style={styles.glow}>
-        <Image style={styles.glow} source={require('@/assets/images/logo-glow.png')} />
-      </Animated.View>
+    <Animated.View
+      onLayout={startAnimation}
+      pointerEvents="none"
+      style={[styles.overlay, { opacity }]}
+    >
+      <ImageBackground
+        source={require('@/assets/images/homebook-splash.png')}
+        contentFit="cover"
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.scrim} />
 
-      <Animated.View entering={keyframe.duration(DURATION)} style={styles.background} />
-      <Animated.View style={styles.imageContainer} entering={logoKeyframe.duration(DURATION)}>
-        <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />
+      <Animated.View
+        style={[
+          styles.content,
+          { transform: [{ scale }] },
+        ]}
+      >
+        <Text style={styles.brand}>HOMEBOOK</Text>
+        <View style={styles.rule} />
+        <Text style={styles.byline}>BY X EXILE</Text>
+
+        <View style={styles.loadingTrack}>
+          <Animated.View
+            style={[
+              styles.loadingBeam,
+              { transform: [{ translateX: progressTranslate }] },
+            ]}
+          />
+        </View>
+        <Text style={styles.loadingText}>PREPARING YOUR MEDIA SPACE</Text>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  imageContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  glow: {
-    width: 201,
-    height: 201,
-    position: 'absolute',
-  },
-  iconContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 128,
-    height: 128,
-    zIndex: 100,
-  },
-  image: {
-    width: 76,
-    height: 71,
-  },
-  background: {
-    borderRadius: 40,
-    experimental_backgroundImage: `linear-gradient(180deg, #3C9FFE, #0274DF)`,
-    width: 128,
-    height: 128,
-    position: 'absolute',
-  },
-  splashOverlay: {
+  overlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#208AEF',
+    backgroundColor: '#050B14',
+    zIndex: 10000,
+    elevation: 10000,
     alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
+    justifyContent: 'flex-end',
+    paddingBottom: 76,
+    overflow: 'hidden',
+  },
+  scrim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(3, 9, 19, 0.48)',
+  },
+  content: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  brand: {
+    color: '#F3F8FC',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 7,
+    textShadowColor: '#001B38',
+    textShadowRadius: 18,
+  },
+  rule: {
+    width: 92,
+    height: 2,
+    backgroundColor: '#28C7F2',
+    marginTop: 17,
+    marginBottom: 12,
+  },
+  byline: {
+    color: '#B7D7E8',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 4,
+  },
+  loadingTrack: {
+    width: 112,
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    overflow: 'hidden',
+    marginTop: 34,
+    borderRadius: 4,
+  },
+  loadingBeam: {
+    width: 42,
+    height: 3,
+    backgroundColor: '#28C7F2',
+    borderRadius: 4,
+  },
+  loadingText: {
+    color: '#D1E2EE',
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginTop: 12,
   },
 });

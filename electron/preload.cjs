@@ -1,8 +1,21 @@
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
-// HOMEBOOK desktop APIs will be exposed here deliberately,
-// through a restricted bridge, when required.
 contextBridge.exposeInMainWorld("homebookDesktop", {
   platform: "desktop",
-});
 
+  importMedia: () => ipcRenderer.invoke("homebook:media:import"),
+
+  scanMedia: (onProgress) => {
+    const listener = (_event, progress) => {
+      if (typeof onProgress === "function") onProgress(progress);
+    };
+
+    ipcRenderer.on("homebook:media:scan-progress", listener);
+
+    return ipcRenderer.invoke("homebook:media:scan").finally(() => {
+      ipcRenderer.removeListener("homebook:media:scan-progress", listener);
+    });
+  },
+
+  cancelMediaScan: () => ipcRenderer.invoke("homebook:media:scan-cancel"),
+});
